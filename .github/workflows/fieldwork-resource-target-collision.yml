@@ -1,0 +1,21 @@
+name: Fieldwork resource target collision
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  resource-target-collision:
+    if: github.head_ref == 'fieldwork/resource-target-collision'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Inject focused collision controls
+        run: python3 .fieldwork-resource-target-collision.py
+      - name: Run focused resource controls
+        run: cargo test -p tauri-build --lib fieldwork_resource_target_collision -- --nocapture
