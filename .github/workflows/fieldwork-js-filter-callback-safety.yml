@@ -33,7 +33,7 @@ jobs:
         run: python3 .fieldwork-js-filter-callback-safety.py
       - name: Run listener-registry controls
         run: cargo test -p tauri --no-default-features --features test --lib js_filter_ -- --nocapture
-      - name: Run webview-store control
+      - name: Run webview-store controls
         if: always()
-        run: cargo test -p tauri --no-default-features --features test --lib app_emit_filter_predicate_runs_without_webview_store_lock -- --nocapture
+        run: cargo test -p tauri --no-default-features --features test --lib app_emit_filter_ -- --nocapture
       # Temporary owned-fork execution carrier for Fieldwork #744.
