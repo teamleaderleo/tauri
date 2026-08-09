@@ -1,0 +1,48 @@
+name: Fieldwork JS filter current dev
+
+on:
+  pull_request:
+    branches:
+      - fieldwork/744-current-dev-base
+
+permissions:
+  contents: read
+
+jobs:
+  js-filter-current-dev:
+    if: github.head_ref == 'fieldwork/744-js-filter-current-dev'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Apply snapshot candidate and reviewer regressions
+        run: |
+          python3 .fieldwork-js-filter-callback-safety-fix.py
+          python3 .fieldwork-js-filter-review-tests.py
+      - name: Check candidate diff
+        run: |
+          git diff --check
+          git diff -- crates/tauri/src/event/listener.rs crates/tauri/src/manager/mod.rs
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run JS listener regression tests
+        run: cargo test -p tauri --no-default-features --features test --lib js_filter_ -- --nocapture
+      - name: Run manager filter regression tests
+        run: cargo test -p tauri --no-default-features --features test --lib app_emit_filter_ -- --nocapture
+      - name: Run nearby event tests
+        run: cargo test -p tauri --no-default-features --features test --lib event::listener::test -- --nocapture
+      - name: Run nearby manager tests
+        run: cargo test -p tauri --no-default-features --features test --lib manager::test -- --nocapture
+      - name: Clippy candidate paths
+        run: cargo clippy -p tauri --no-default-features --features test --lib -- -D warnings
