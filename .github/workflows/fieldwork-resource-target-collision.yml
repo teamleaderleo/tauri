@@ -10,11 +10,14 @@ permissions:
 
 jobs:
   resource-target-collision:
-    if: github.head_ref == 'fieldwork/resource-target-collision'
+    if: github.head_ref == 'fieldwork/resource-target-collision' || github.head_ref == 'fieldwork/resource-target-collision-fix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Apply candidate repair
+        if: github.head_ref == 'fieldwork/resource-target-collision-fix'
+        run: python3 .fieldwork-resource-target-collision-fix.py
       - name: Inject focused collision controls
         run: python3 .fieldwork-resource-target-collision.py
       - name: Run focused resource controls
