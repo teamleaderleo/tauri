@@ -106,13 +106,71 @@ listener_tests = r'''
       "JS filter predicate ran while the JS listener registry mutex was held"
     );
   }
+
+  #[test]
+  fn js_filter_reentrant_unlisten_affects_next_dispatch() {
+    use std::sync::{
+      atomic::{AtomicUsize, Ordering},
+      Arc,
+    };
+
+    let app = crate::test::mock_app();
+    let webview_window =
+      crate::WebviewWindowBuilder::new(&app, "filter-reentry", Default::default())
+        .build()
+        .unwrap();
+    let webview = webview_window.as_ref();
+
+    let listeners = Listeners::default();
+    let listeners_from_filter = listeners.clone();
+    let event = crate::EventName::new("filter-reentry".to_owned()).unwrap();
+    let event_from_filter = event.clone();
+    let id = listeners.next_event_id();
+    listeners.listen_js(
+      event.as_str_event(),
+      webview.label(),
+      EventTarget::webview(webview.label()),
+      id,
+    );
+    let args = EmitArgs::new(event.as_str_event(), &()).unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_from_filter = calls.clone();
+
+    listeners
+      .emit_js_filter(
+        std::iter::once(webview),
+        &args,
+        Some(move |_: &EventTarget| {
+          calls_from_filter.fetch_add(1, Ordering::SeqCst);
+          listeners_from_filter.unlisten_js(event_from_filter.as_str_event(), id);
+          true
+        }),
+      )
+      .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(
+      !listeners.has_js_listener(event.as_str_event(), |_| true),
+      "reentrant unlisten did not update the registry for the next dispatch"
+    );
+
+    listeners
+      .emit_js_filter(
+        std::iter::once(webview),
+        &args,
+        Some(|_: &EventTarget| -> bool {
+          panic!("removed listener was filtered again on a later dispatch")
+        }),
+      )
+      .unwrap();
+  }
 '''
 insert_once(listener, listener_marker, listener_tests, "listener test insertion")
 
 manager = Path("crates/tauri/src/manager/mod.rs")
 manager_marker = """  use super::AppManager;
 """
-manager_test = r'''
+manager_tests = r'''
 
   #[test]
   fn app_emit_filter_predicate_runs_without_webview_store_lock() {
@@ -161,5 +219,35 @@ manager_test = r'''
       "public filter predicate ran while the global webview-store mutex was held"
     );
   }
+
+  #[test]
+  fn app_emit_filter_can_reenter_webview_lookup() {
+    use crate::sealed::ManagerBase;
+
+    let app = crate::test::mock_app();
+    let webview_window =
+      crate::WebviewWindowBuilder::new(&app, "filter-webview-reentry", Default::default())
+        .build()
+        .unwrap();
+    let webview = webview_window.as_ref();
+    let manager = app.handle().manager();
+
+    let event = crate::EventName::new("filter-webview-reentry".to_owned()).unwrap();
+    let id = manager.listeners.next_event_id();
+    manager.listeners.listen_js(
+      event.as_str_event(),
+      webview.label(),
+      crate::EventTarget::webview(webview.label()),
+      id,
+    );
+
+    manager
+      .emit_filter(
+        event.as_str_event(),
+        super::EmitPayload::Serialize(&()),
+        |_: &crate::EventTarget| manager.get_webview(webview.label()).is_some(),
+      )
+      .unwrap();
+  }
 '''
-insert_once(manager, manager_marker, manager_test, "manager test insertion")
+insert_once(manager, manager_marker, manager_tests, "manager test insertion")
