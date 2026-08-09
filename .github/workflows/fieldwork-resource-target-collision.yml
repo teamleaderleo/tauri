@@ -20,5 +20,44 @@ jobs:
         run: python3 .fieldwork-resource-target-collision-fix.py
       - name: Inject focused collision controls
         run: python3 .fieldwork-resource-target-collision.py
+      - name: Inject identical-overlap compatibility control
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('crates/tauri-build/src/lib.rs')
+          text = p.read_text()
+          name = 'fn same_source_same_target_overlap_remains_accepted()'
+          if name not in text:
+              marker = '''  #[test]\n  fn flattened_glob_same_basename_collision_is_rejected() {\n'''
+              test = r'''  #[test]
+          fn same_source_same_target_overlap_remains_accepted() {
+            let root = temp_root("resource-same-source-overlap");
+            let output = root.join("out");
+            fs::create_dir_all(&output).unwrap();
+
+            let source = root.join("source.txt");
+            fs::write(&source, b"same source").unwrap();
+            let pattern = root.join("*.txt").to_string_lossy().into_owned();
+            let resources = HashMap::from([
+              (source.to_string_lossy().into_owned(), "same.txt".to_string()),
+              (pattern, "same.txt".to_string()),
+            ]);
+
+            let result = copy_resources(ResourcePaths::from_map(&resources, true), &output);
+            assert!(
+              result.is_ok(),
+              "the same canonical source may overlap on the same final target: {result:?}"
+            );
+            assert_eq!(fs::read(output.join("same.txt")).unwrap(), b"same source");
+
+            let _ = fs::remove_dir_all(&root);
+          }
+
+'''
+              if text.count(marker) != 1:
+                  raise SystemExit('identical-overlap insertion marker mismatch')
+              text = text.replace(marker, test + marker, 1)
+              p.write_text(text)
+          PY
       - name: Run focused resource controls
         run: cargo test -p tauri-build --lib fieldwork_resource_target_collision -- --nocapture
