@@ -32,4 +32,13 @@ jobs:
       - name: Inject focused plugin-store controls
         run: python3 .fieldwork-plugin-store-reentrancy.py
       - name: Run plugin-store callback ownership controls
-        run: cargo test -p tauri --no-default-features --features test --lib fieldwork_plugin_store_reentrancy -- --nocapture
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p tauri --no-default-features --features test --lib fieldwork_plugin_store_reentrancy -- --nocapture 2>&1 | tee fieldwork-plugin-store-result.txt
+      - name: Upload focused receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fieldwork-plugin-store-${{ github.head_ref }}
+          path: fieldwork-plugin-store-result.txt
