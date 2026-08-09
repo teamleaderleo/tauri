@@ -28,6 +28,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Apply candidate repair
         if: github.head_ref == 'fieldwork/743-authority-deny-scope-fix'
-        run: git apply .fieldwork-authority-deny-scope.patch
+        run: python3 .fieldwork-authority-deny-scope.py
       - name: Run focused authority controls
         run: cargo test -p tauri --no-default-features --features test --test fieldwork_authority_deny_scope -- --nocapture
