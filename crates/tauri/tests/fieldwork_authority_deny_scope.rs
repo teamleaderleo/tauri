@@ -62,14 +62,16 @@ fn capability(
   identifier: &str,
   local: bool,
   remote: Option<&str>,
-  window: &str,
+  windows: &[&str],
+  webviews: &[&str],
   permission: &str,
 ) -> Capability {
   serde_json::from_value(serde_json::json!({
     "identifier": identifier,
     "local": local,
     "remote": remote.map(|url| serde_json::json!({ "urls": [url] })),
-    "windows": [window],
+    "windows": windows,
+    "webviews": webviews,
     "permissions": [permission]
   }))
   .unwrap()
@@ -140,6 +142,21 @@ fn deny_for_other_window_does_not_block_main_window() {
 }
 
 #[test]
+fn deny_for_other_webview_does_not_block_main_webview() {
+  let authority = authority(
+    vec![command(ExecutionContext::Local, &[], &["main-webview"])],
+    vec![command(ExecutionContext::Local, &[], &["admin-webview"])],
+  );
+
+  assert!(
+    authority
+      .resolve_access("fieldwork", "shell", "main-webview", &Origin::Local)
+      .is_some(),
+    "deny rule for another webview blocked main-webview access"
+  );
+}
+
+#[test]
 fn matching_deny_still_overrides_matching_allow() {
   let authority = authority(
     vec![command(ExecutionContext::Local, &["main"], &[])],
@@ -155,14 +172,46 @@ fn matching_deny_still_overrides_matching_allow() {
 }
 
 #[test]
+fn matching_deny_wins_even_with_unrelated_deny_present() {
+  let authority = authority(
+    vec![command(ExecutionContext::Local, &["main"], &[])],
+    vec![
+      command(
+        ExecutionContext::Remote {
+          url: "https://denied.example/*".parse().unwrap(),
+        },
+        &["main"],
+        &[],
+      ),
+      command(ExecutionContext::Local, &["main"], &[]),
+    ],
+  );
+
+  assert!(
+    authority
+      .resolve_access("fieldwork", "main", "main", &Origin::Local)
+      .is_none(),
+    "matching deny was lost when an unrelated deny was present"
+  );
+}
+
+#[test]
 fn resolved_capability_deny_for_other_origin_does_not_block_local_access() {
   let authority = resolved_authority(
-    capability("local-main", true, None, "main", "allow-fieldwork"),
+    capability(
+      "local-main",
+      true,
+      None,
+      &["main"],
+      &[],
+      "allow-fieldwork",
+    ),
     capability(
       "remote-main-deny",
       false,
       Some("https://denied.example/*"),
-      "main",
+      &["main"],
+      &[],
       "deny-fieldwork",
     ),
   );
@@ -178,8 +227,22 @@ fn resolved_capability_deny_for_other_origin_does_not_block_local_access() {
 #[test]
 fn resolved_capability_deny_for_other_window_does_not_block_main_window() {
   let authority = resolved_authority(
-    capability("local-main", true, None, "main", "allow-fieldwork"),
-    capability("local-admin-deny", true, None, "admin", "deny-fieldwork"),
+    capability(
+      "local-main",
+      true,
+      None,
+      &["main"],
+      &[],
+      "allow-fieldwork",
+    ),
+    capability(
+      "local-admin-deny",
+      true,
+      None,
+      &["admin"],
+      &[],
+      "deny-fieldwork",
+    ),
   );
 
   assert!(
@@ -187,5 +250,34 @@ fn resolved_capability_deny_for_other_window_does_not_block_main_window() {
       .resolve_access("fieldwork", "main", "main", &Origin::Local)
       .is_some(),
     "resolved admin-window deny blocked main-window access"
+  );
+}
+
+#[test]
+fn resolved_capability_deny_for_other_webview_does_not_block_main_webview() {
+  let authority = resolved_authority(
+    capability(
+      "local-main-webview",
+      true,
+      None,
+      &[],
+      &["main-webview"],
+      "allow-fieldwork",
+    ),
+    capability(
+      "local-admin-webview-deny",
+      true,
+      None,
+      &[],
+      &["admin-webview"],
+      "deny-fieldwork",
+    ),
+  );
+
+  assert!(
+    authority
+      .resolve_access("fieldwork", "shell", "main-webview", &Origin::Local)
+      .is_some(),
+    "resolved admin-webview deny blocked main-webview access"
   );
 }
