@@ -1,0 +1,19 @@
+name: Fieldwork focused research
+
+on:
+  pull_request:
+    branches:
+      - fieldwork/runner-base
+
+permissions:
+  contents: read
+
+jobs:
+  authority-deny-scope:
+    if: contains(github.head_ref, '743-authority-deny-scope')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run focused authority controls
+        run: cargo test -p tauri --no-default-features --features test --test fieldwork_authority_deny_scope -- --nocapture
