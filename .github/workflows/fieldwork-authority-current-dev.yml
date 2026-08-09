@@ -26,8 +26,10 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
-      - name: Apply candidate repair
-        run: python3 .fieldwork-authority-deny-scope.py
+      - name: Apply candidate repair and unit regressions
+        run: |
+          python3 .fieldwork-authority-deny-scope.py
+          python3 .fieldwork-authority-unit-tests.py
       - name: Check candidate diff
         run: |
           git diff --check
@@ -36,7 +38,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run focused authority controls
         run: cargo test -p tauri --no-default-features --features test --test fieldwork_authority_deny_scope -- --nocapture
-      - name: Run diagnostic regressions
+      - name: Run authority unit regressions
         run: cargo test -p tauri --no-default-features --features test --lib ipc::authority::tests -- --nocapture
       - name: Clippy candidate authority path
         run: cargo clippy -p tauri --no-default-features --features test --lib -- -D warnings
