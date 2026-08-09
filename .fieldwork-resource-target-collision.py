@@ -84,6 +84,30 @@ mod fieldwork_resource_target_collision {
   }
 
   #[test]
+  fn same_source_same_target_overlap_remains_accepted() {
+    let root = temp_root("resource-same-source-overlap");
+    let output = root.join("out");
+    fs::create_dir_all(&output).unwrap();
+
+    let source = root.join("source.txt");
+    fs::write(&source, b"same source").unwrap();
+    let pattern = root.join("*.txt").to_string_lossy().into_owned();
+    let resources = HashMap::from([
+      (source.to_string_lossy().into_owned(), "same.txt".to_string()),
+      (pattern, "same.txt".to_string()),
+    ]);
+
+    let result = copy_resources(ResourcePaths::from_map(&resources, true), &output);
+    assert!(
+      result.is_ok(),
+      "the same canonical source may overlap on the same final target: {result:?}"
+    );
+    assert_eq!(fs::read(output.join("same.txt")).unwrap(), b"same source");
+
+    let _ = fs::remove_dir_all(&root);
+  }
+
+  #[test]
   fn flattened_glob_same_basename_collision_is_rejected() {
     let root = temp_root("resource-glob-collision");
     let docs_a = root.join("docs/a");
