@@ -1,1 +1,0 @@
-Temporary Fieldwork #744 execution marker. Trigger canonical rustfmt, exact-diff archival, ordinary regression tests, and clippy on current public dev.
