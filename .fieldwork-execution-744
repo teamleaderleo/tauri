@@ -1,2 +1,2 @@
 Temporary execution marker for Fieldwork #744. This branch is an evidence carrier only.
-Rerun the corrected callback-safety controls against the refreshed fork-base workflow.
+Run snapshot candidate with true listener-mutation and webview-lookup reentrancy controls.
