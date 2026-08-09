@@ -1,2 +1,2 @@
 Temporary execution marker for Fieldwork #744. This branch is an evidence carrier only.
-Run snapshot candidate with true listener-mutation and webview-lookup reentrancy controls.
+Run snapshot candidate with add/remove listener reentrancy and serialize/string webview-lookup controls.
