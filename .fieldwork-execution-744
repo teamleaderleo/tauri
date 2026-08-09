@@ -1,2 +1,2 @@
 Temporary execution marker for Fieldwork #744. This branch is an evidence carrier only.
-Trigger the corrected callback-safety controls after the workflow exists on the branch.
+Rerun the corrected callback-safety controls against the refreshed fork-base workflow.
