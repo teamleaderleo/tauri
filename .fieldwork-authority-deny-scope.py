@@ -113,15 +113,11 @@ old_resolve = '''    if self
           .collect::<Vec<_>>();
 '''
 
-new_resolve = '''    if self
-      .denied_commands
-      .get(command)
-      .is_some_and(|resolved| {
-        resolved
-          .iter()
-          .any(|cmd| resolved_command_matches(cmd, window, webview, origin))
-      })
-    {
+new_resolve = '''    if self.denied_commands.get(command).is_some_and(|resolved| {
+      resolved
+        .iter()
+        .any(|cmd| resolved_command_matches(cmd, window, webview, origin))
+    }) {
       None
     } else {
       self.allowed_commands.get(command).and_then(|resolved| {
