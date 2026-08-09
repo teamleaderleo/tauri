@@ -30,7 +30,11 @@ jobs:
         if: github.head_ref == 'fieldwork/js-filter-callback-safety-fix'
         run: python3 .fieldwork-js-filter-callback-safety-fix.py
       - name: Inject focused callback-safety controls
-        run: python3 .fieldwork-js-filter-callback-safety.py
+        run: |
+          python3 .fieldwork-js-filter-callback-safety.py
+          if [ "${{ github.head_ref }}" = "fieldwork/js-filter-callback-safety-fix" ]; then
+            python3 .fieldwork-js-filter-reentry-additions.py
+          fi
       - name: Run listener-registry controls
         run: cargo test -p tauri --no-default-features --features test --lib js_filter_ -- --nocapture
       - name: Run webview-store controls
