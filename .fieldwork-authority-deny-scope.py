@@ -135,7 +135,7 @@ resolve_message_marker = '''  #[cfg(debug_assertions)]
   fn resolve_access_message() {
 '''
 
-diagnostic_test = '''  #[cfg(debug_assertions)]
+diagnostic_tests = '''  #[cfg(debug_assertions)]
   #[test]
   fn unrelated_deny_is_not_reported_as_explicit() {
     use tauri_utils::acl::{resolved::ResolvedCommandReference, APP_ACL_KEY};
@@ -188,11 +188,74 @@ diagnostic_test = '''  #[cfg(debug_assertions)]
     );
   }
 
+  #[cfg(debug_assertions)]
+  #[test]
+  fn explicit_deny_message_only_references_matching_denies() {
+    use tauri_utils::acl::{resolved::ResolvedCommandReference, APP_ACL_KEY};
+
+    let command = "my-command";
+    let window = "main";
+    let webview = "main";
+    let allowed_commands = [(
+      command.to_string(),
+      vec![ResolvedCommand {
+        windows: vec![Pattern::new(window).unwrap()],
+        referenced_by: ResolvedCommandReference::new(
+          "allow-capability".to_string(),
+          "allow-command".to_string(),
+        ),
+        ..Default::default()
+      }],
+    )]
+    .into_iter()
+    .collect();
+    let denied_commands = [(
+      command.to_string(),
+      vec![
+        ResolvedCommand {
+          windows: vec![Pattern::new(window).unwrap()],
+          context: ExecutionContext::Remote {
+            url: "https://denied.example/*".parse().unwrap(),
+          },
+          referenced_by: ResolvedCommandReference::new(
+            "unrelated-deny-capability".to_string(),
+            "unrelated-deny-command".to_string(),
+          ),
+          ..Default::default()
+        },
+        ResolvedCommand {
+          windows: vec![Pattern::new(window).unwrap()],
+          referenced_by: ResolvedCommandReference::new(
+            "matching-deny-capability".to_string(),
+            "matching-deny-command".to_string(),
+          ),
+          ..Default::default()
+        },
+      ],
+    )]
+    .into_iter()
+    .collect();
+
+    let authority = RuntimeAuthority::new(
+      Default::default(),
+      Resolved {
+        allowed_commands,
+        denied_commands,
+        ..Default::default()
+      },
+    );
+
+    let message =
+      authority.resolve_access_message(APP_ACL_KEY, command, window, webview, &Origin::Local);
+    assert!(message.contains("matching-deny-capability"));
+    assert!(!message.contains("unrelated-deny-capability"));
+  }
+
 '''
 
 replace_once(
     resolve_message_marker,
-    diagnostic_test + resolve_message_marker,
+    diagnostic_tests + resolve_message_marker,
     "diagnostic regression insertion",
 )
 
