@@ -1,0 +1,2 @@
+Temporary execution marker for Fieldwork #744. This branch is an evidence carrier only.
+Run snapshot candidate with add/remove listener reentrancy and serialize/string webview-lookup controls.
