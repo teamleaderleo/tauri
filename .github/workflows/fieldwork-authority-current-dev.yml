@@ -30,10 +30,16 @@ jobs:
         run: |
           python3 .fieldwork-authority-deny-scope.py
           python3 .fieldwork-authority-unit-tests.py
-      - name: Check candidate diff
+      - name: Check and retain candidate diff
         run: |
           git diff --check
-          git diff -- crates/tauri/src/ipc/authority.rs
+          git diff -- crates/tauri/src/ipc/authority.rs | tee /tmp/fieldwork-743-authority.patch
+      - name: Upload candidate patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: fieldwork-743-authority-candidate
+          path: /tmp/fieldwork-743-authority.patch
+          if-no-files-found: error
       - name: Check candidate formatting
         run: cargo fmt --all -- --check
       - name: Run focused authority controls
