@@ -28,13 +28,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Apply candidate repair
         run: python3 .fieldwork-authority-deny-scope.py
+      - name: Check candidate diff
+        run: |
+          git diff --check
+          git diff -- crates/tauri/src/ipc/authority.rs
       - name: Check candidate formatting
         run: cargo fmt --all -- --check
       - name: Run focused authority controls
         run: cargo test -p tauri --no-default-features --features test --test fieldwork_authority_deny_scope -- --nocapture
-      - name: Run diagnostic regression
-        run: cargo test -p tauri --no-default-features --features test --lib unrelated_deny_is_not_reported_as_explicit -- --nocapture
-      - name: Run nearby authority unit tests
+      - name: Run diagnostic regressions
         run: cargo test -p tauri --no-default-features --features test --lib ipc::authority::tests -- --nocapture
       - name: Clippy candidate authority path
         run: cargo clippy -p tauri --no-default-features --features test --lib -- -D warnings
