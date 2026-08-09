@@ -198,14 +198,7 @@ fn matching_deny_wins_even_with_unrelated_deny_present() {
 #[test]
 fn resolved_capability_deny_for_other_origin_does_not_block_local_access() {
   let authority = resolved_authority(
-    capability(
-      "local-main",
-      true,
-      None,
-      &["main"],
-      &[],
-      "allow-fieldwork",
-    ),
+    capability("local-main", true, None, &["main"], &[], "allow-fieldwork"),
     capability(
       "remote-main-deny",
       false,
@@ -227,14 +220,7 @@ fn resolved_capability_deny_for_other_origin_does_not_block_local_access() {
 #[test]
 fn resolved_capability_deny_for_other_window_does_not_block_main_window() {
   let authority = resolved_authority(
-    capability(
-      "local-main",
-      true,
-      None,
-      &["main"],
-      &[],
-      "allow-fieldwork",
-    ),
+    capability("local-main", true, None, &["main"], &[], "allow-fieldwork"),
     capability(
       "local-admin-deny",
       true,
