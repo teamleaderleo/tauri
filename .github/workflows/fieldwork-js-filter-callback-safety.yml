@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   js-filter-callback-safety:
-    if: github.head_ref == 'fieldwork/js-filter-callback-safety'
+    if: github.head_ref == 'fieldwork/js-filter-callback-safety' || github.head_ref == 'fieldwork/js-filter-callback-safety-fix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
+      - name: Apply snapshot candidate
+        if: github.head_ref == 'fieldwork/js-filter-callback-safety-fix'
+        run: python3 .fieldwork-js-filter-callback-safety-fix.py
       - name: Inject focused callback-safety controls
         run: python3 .fieldwork-js-filter-callback-safety.py
       - name: Run listener-registry controls
