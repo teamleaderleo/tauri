@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   plugin-store-reentrancy:
-    if: github.head_ref == 'fieldwork/plugin-store-reentrancy'
+    if: github.head_ref == 'fieldwork/plugin-store-reentrancy' || github.head_ref == 'fieldwork/plugin-store-reentrancy-fix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
+      - name: Apply callback-ownership candidate
+        if: github.head_ref == 'fieldwork/plugin-store-reentrancy-fix'
+        run: python3 .fieldwork-plugin-store-reentrancy-fix.py
       - name: Inject focused plugin-store controls
         run: python3 .fieldwork-plugin-store-reentrancy.py
       - name: Run plugin-store callback ownership controls
