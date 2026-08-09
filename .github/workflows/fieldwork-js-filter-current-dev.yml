@@ -30,12 +30,19 @@ jobs:
         run: |
           python3 .fieldwork-js-filter-callback-safety-fix.py
           python3 .fieldwork-js-filter-review-tests.py
-      - name: Check candidate diff
+      - name: Normalize candidate formatting
+        run: cargo fmt --all
+      - name: Check and retain canonical candidate diff
         run: |
+          cargo fmt --all -- --check
           git diff --check
-          git diff -- crates/tauri/src/event/listener.rs crates/tauri/src/manager/mod.rs
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+          git diff -- crates/tauri/src/event/listener.rs crates/tauri/src/manager/mod.rs | tee /tmp/fieldwork-744-js-filter.patch
+      - name: Upload canonical candidate patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: fieldwork-744-js-filter-candidate
+          path: /tmp/fieldwork-744-js-filter.patch
+          if-no-files-found: error
       - name: Run JS listener regression tests
         run: cargo test -p tauri --no-default-features --features test --lib js_filter_ -- --nocapture
       - name: Run manager filter regression tests
