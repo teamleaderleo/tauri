@@ -77,7 +77,7 @@ new_debug = '''    let matching_denied = self.denied_commands.get(&command).and_
 
     if let Some(resolved) = matching_denied {
       format!(
-        "{command_pretty_name} explicitly denied on window \\"{window}\\", webview \\"{webview}\\", origin {origin}\\n\\nreferenced by: {}",
+        "{command_pretty_name} explicitly denied on origin {origin}\\n\\nreferenced by: {}",
         print_references(&resolved)
       )
     } else {
@@ -133,5 +133,71 @@ new_resolve = '''    if self
 '''
 
 replace_once(old_resolve, new_resolve, "runtime access matcher")
+
+resolve_message_marker = '''  #[cfg(debug_assertions)]
+  #[test]
+  fn resolve_access_message() {
+'''
+
+diagnostic_test = '''  #[cfg(debug_assertions)]
+  #[test]
+  fn unrelated_deny_is_not_reported_as_explicit() {
+    use tauri_utils::acl::{resolved::ResolvedCommandReference, APP_ACL_KEY};
+
+    let command = "my-command";
+    let window = "main";
+    let webview = "main";
+    let allowed_commands = [(
+      command.to_string(),
+      vec![ResolvedCommand {
+        windows: vec![Pattern::new(window).unwrap()],
+        referenced_by: ResolvedCommandReference::new(
+          "allow-capability".to_string(),
+          "allow-command".to_string(),
+        ),
+        ..Default::default()
+      }],
+    )]
+    .into_iter()
+    .collect();
+    let denied_commands = [(
+      command.to_string(),
+      vec![ResolvedCommand {
+        windows: vec![Pattern::new(window).unwrap()],
+        context: ExecutionContext::Remote {
+          url: "https://denied.example/*".parse().unwrap(),
+        },
+        referenced_by: ResolvedCommandReference::new(
+          "deny-capability".to_string(),
+          "deny-command".to_string(),
+        ),
+        ..Default::default()
+      }],
+    )]
+    .into_iter()
+    .collect();
+
+    let authority = RuntimeAuthority::new(
+      Default::default(),
+      Resolved {
+        allowed_commands,
+        denied_commands,
+        ..Default::default()
+      },
+    );
+
+    assert_eq!(
+      authority.resolve_access_message(APP_ACL_KEY, command, window, webview, &Origin::Local),
+      "allowed"
+    );
+  }
+
+'''
+
+replace_once(
+    resolve_message_marker,
+    diagnostic_test + resolve_message_marker,
+    "diagnostic regression insertion",
+)
 
 path.write_text(text)
