@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   authority-deny-scope:
-    if: github.head_ref == 'fieldwork/743-authority-deny-scope-red'
+    if: github.head_ref == 'fieldwork/743-authority-deny-scope-red' || github.head_ref == 'fieldwork/743-authority-deny-scope-fix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -26,5 +26,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
+      - name: Apply candidate repair
+        if: github.head_ref == 'fieldwork/743-authority-deny-scope-fix'
+        run: git apply .fieldwork-authority-deny-scope.patch
       - name: Run focused authority controls
         run: cargo test -p tauri --no-default-features --features test --test fieldwork_authority_deny_scope -- --nocapture
