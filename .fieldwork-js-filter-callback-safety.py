@@ -144,7 +144,7 @@ manager_test = r'''
 
     manager
       .emit_filter(
-        event,
+        event.as_str_event(),
         super::EmitPayload::Serialize(&()),
         |_: &crate::EventTarget| {
           lock_was_available_from_filter.store(
