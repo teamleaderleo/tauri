@@ -10,6 +10,9 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+dynamic-acl = ["tauri/dynamic-acl"]
+
 [dev-dependencies]
 tauri-utils = { path = "../../tauri-utils/", features = ["build-2"] }
 tauri = { path = "../../tauri/", default-features = false, features = ["test"] }
