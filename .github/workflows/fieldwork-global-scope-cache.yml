@@ -1,0 +1,141 @@
+name: Fieldwork global scope cache discriminator
+
+on:
+  pull_request:
+    branches:
+      - fieldwork/global-scope-cache-exec-base
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  characterize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify pinned source ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          pinned="2f11853d2108d2790917c68f10de7a4d01a6d70f"
+          git merge-base --is-ancestor "$pinned" HEAD
+
+      - name: Inject focused global-scope cache controls
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("crates/tauri/src/ipc/authority.rs")
+          source = path.read_text()
+
+          old_import = "resolved::{Resolved, ResolvedCommand},"
+          new_import = "resolved::{Resolved, ResolvedCommand, ResolvedScope},"
+          if old_import not in source:
+              raise SystemExit("expected resolved import not found")
+          source = source.replace(old_import, new_import, 1)
+
+          marker = '''  #[test]\n  fn denied_command_takes_precedence() {'''
+          if marker not in source:
+              raise SystemExit("test insertion marker not found")
+
+          test = r'''  #[test]
+  fn global_scope_cache_isolated_by_plugin_key() {
+    use super::ScopeValue;
+
+    let app = crate::test::mock_app();
+    let authority = RuntimeAuthority::new(
+      Default::default(),
+      Resolved {
+        global_scope: [
+          (
+            "alpha".to_string(),
+            ResolvedScope {
+              allow: vec!["alpha-only".to_string().into()],
+              deny: vec![],
+            },
+          ),
+          (
+            "beta".to_string(),
+            ResolvedScope {
+              allow: vec!["beta-only".to_string().into()],
+              deny: vec![],
+            },
+          ),
+        ]
+        .into_iter()
+        .collect(),
+        ..Default::default()
+      },
+    );
+
+    let alpha: ScopeValue<String> = authority
+      .scope_manager
+      .get_global_scope_typed(app.handle(), "alpha")
+      .unwrap();
+    let beta: ScopeValue<String> = authority
+      .scope_manager
+      .get_global_scope_typed(app.handle(), "beta")
+      .unwrap();
+
+    assert_eq!(alpha.allows()[0].as_str(), "alpha-only");
+    assert_eq!(beta.allows()[0].as_str(), "beta-only");
+  }
+
+  #[test]
+  fn empty_global_scope_lookup_does_not_poison_configured_plugin() {
+    use super::ScopeValue;
+
+    let app = crate::test::mock_app();
+    let authority = RuntimeAuthority::new(
+      Default::default(),
+      Resolved {
+        global_scope: [(
+          "configured".to_string(),
+          ResolvedScope {
+            allow: vec!["configured-only".to_string().into()],
+            deny: vec![],
+          },
+        )]
+        .into_iter()
+        .collect(),
+        ..Default::default()
+      },
+    );
+
+    let absent: ScopeValue<String> = authority
+      .scope_manager
+      .get_global_scope_typed(app.handle(), "absent")
+      .unwrap();
+    let configured: ScopeValue<String> = authority
+      .scope_manager
+      .get_global_scope_typed(app.handle(), "configured")
+      .unwrap();
+
+    assert!(absent.allows().is_empty());
+    assert_eq!(configured.allows()[0].as_str(), "configured-only");
+  }
+
+'''
+
+          source = source.replace(marker, test + marker, 1)
+          path.write_text(source)
+
+      - name: Confirm baseline reproduces cache identity failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          cargo test -p tauri global_scope_cache_ --lib -- --nocapture 2>&1 | tee /tmp/global-scope-cache.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$status" -eq 0 ]; then
+            echo "Expected focused controls to fail on the pinned baseline, but they passed."
+            exit 1
+          fi
+
+          grep -q "global_scope_cache_isolated_by_plugin_key" /tmp/global-scope-cache.log
+          grep -q "FAILED" /tmp/global-scope-cache.log
+          echo "Pinned baseline reproduced the focused global-scope cache failure as expected."
