@@ -1,13 +1,32 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+  atomic::{AtomicUsize, Ordering},
+  Arc, Mutex,
+};
 
 use tauri::{
+  ipc::ScopeObject,
   plugin::{Builder as PluginBuilder, TauriPlugin},
   test::{mock_builder, mock_context, noop_assets, MockRuntime},
-  utils::acl::resolved::{Resolved, ResolvedScope},
+  utils::acl::{resolved::{Resolved, ResolvedScope}, Value},
+  AppHandle, Runtime,
 };
 
 type ScopeSnapshot = (Vec<String>, Vec<String>);
 type ScopeSink = Arc<Mutex<Option<ScopeSnapshot>>>;
+
+static DESERIALIZATIONS: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug)]
+struct CountingScope(String);
+
+impl ScopeObject for CountingScope {
+  type Error = serde_json::Error;
+
+  fn deserialize<R: Runtime>(_app: &AppHandle<R>, raw: Value) -> Result<Self, Self::Error> {
+    DESERIALIZATIONS.fetch_add(1, Ordering::SeqCst);
+    serde_json::from_value(raw.into()).map(Self)
+  }
+}
 
 fn scope_plugin(name: &'static str, sink: ScopeSink) -> TauriPlugin<MockRuntime> {
   PluginBuilder::<MockRuntime>::new(name)
@@ -24,6 +43,21 @@ fn scope_plugin(name: &'static str, sink: ScopeSink) -> TauriPlugin<MockRuntime>
         .map(|value| value.as_ref().clone())
         .collect();
       *sink.lock().unwrap() = Some((allow, deny));
+      Ok(())
+    })
+    .build()
+}
+
+fn repeated_scope_plugin(name: &'static str) -> TauriPlugin<MockRuntime> {
+  PluginBuilder::<MockRuntime>::new(name)
+    .setup(move |_app, api| {
+      let first = api.scope::<CountingScope>()?;
+      let second = api.scope::<CountingScope>()?;
+
+      assert_eq!(first.allows()[0].0, "alpha-allow");
+      assert_eq!(first.denies()[0].0, "alpha-deny");
+      assert_eq!(second.allows()[0].0, "alpha-allow");
+      assert_eq!(second.denies()[0].0, "alpha-deny");
       Ok(())
     })
     .build()
@@ -111,4 +145,18 @@ fn empty_global_scope_lookup_does_not_poison_configured_plugin() {
     snapshot(&beta),
     (vec!["beta-allow".to_string()], vec!["beta-deny".to_string()])
   );
+}
+
+#[test]
+fn repeated_same_plugin_lookup_reuses_deserialized_scope() {
+  DESERIALIZATIONS.store(0, Ordering::SeqCst);
+
+  let app = mock_builder()
+    .plugin(repeated_scope_plugin("alpha"))
+    .build(context_with_scopes())
+    .unwrap();
+
+  run_setup(app);
+
+  assert_eq!(DESERIALIZATIONS.load(Ordering::SeqCst), 2);
 }
