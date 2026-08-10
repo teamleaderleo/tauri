@@ -1,4 +1,4 @@
-name: Fieldwork 774 controlled materializer
+name: Fieldwork 774 controlled formatter
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  materialize:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,150 +17,25 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
 
-      - name: Apply bounded repair if needed
-        shell: python
-        run: |
-          from pathlib import Path
-          import re
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-          path = Path("crates/tauri/src/ipc/authority.rs")
-          source = path.read_text()
+      - name: Apply repository rustfmt
+        shell: bash
+        run: cargo fmt --all
 
-          if "global_scope_cache: BTreeMap<String, StateManager>" in source:
-              Path("/tmp/already-patched").write_text("yes")
-              raise SystemExit(0)
-
-          def replace_once(old, new):
-              global source
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one replacement for {old!r}, found {count}")
-              source = source.replace(old, new, 1)
-
-          replace_once(
-              '''    let command_cache = resolved_acl
-                .command_scope
-                .keys()
-                .map(|key| (*key, StateManager::new()))
-                .collect();
-              Self {''',
-              '''    let command_cache = resolved_acl
-                .command_scope
-                .keys()
-                .map(|key| (*key, StateManager::new()))
-                .collect();
-              let global_scope_cache = resolved_acl
-                .global_scope
-                .keys()
-                .map(|key| (key.clone(), StateManager::new()))
-                .collect();
-              Self {''',
-          )
-          replace_once(
-              "        global_scope_cache: StateManager::new(),",
-              "        global_scope_cache,",
-          )
-          replace_once(
-              '''    for (plugin, global_scope) in resolved.global_scope {
-                let global_scope_entry = self.scope_manager.global_scope.entry(plugin).or_default();
-
-                global_scope_entry.allow.extend(global_scope.allow);
-                global_scope_entry.deny.extend(global_scope.deny);
-
-                self.scope_manager.global_scope_cache = StateManager::new();
-              }''',
-              '''    for (plugin, global_scope) in resolved.global_scope {
-                let global_scope_entry = self
-                  .scope_manager
-                  .global_scope
-                  .entry(plugin.clone())
-                  .or_default();
-
-                global_scope_entry.allow.extend(global_scope.allow);
-                global_scope_entry.deny.extend(global_scope.deny);
-
-                self
-                  .scope_manager
-                  .global_scope_cache
-                  .insert(plugin, StateManager::new());
-              }''',
-          )
-          replace_once(
-              "  global_scope_cache: StateManager,",
-              "  global_scope_cache: BTreeMap<String, StateManager>,",
-          )
-
-          pattern = re.compile(
-              r'''  pub\(crate\) fn get_global_scope_typed<R: Runtime, T: ScopeObject>\(\n'''
-              r'''    &self,\n'''
-              r'''    app: &AppHandle<R>,\n'''
-              r'''    key: &str,\n'''
-              r'''  \) -> crate::Result<ScopeValue<T>> \{.*?\n'''
-              r'''  \}\n\n'''
-              r'''  fn get_command_scope_typed''',
-              re.DOTALL,
-          )
-          replacement = '''  pub(crate) fn get_global_scope_typed<R: Runtime, T: ScopeObject>(
-              &self,
-              app: &AppHandle<R>,
-              key: &str,
-            ) -> crate::Result<ScopeValue<T>> {
-              let Some(cache) = self.global_scope_cache.get(key) else {
-                return Ok(ScopeValue {
-                  allow: Arc::new(Vec::new()),
-                  deny: Arc::new(Vec::new()),
-                });
-              };
-
-              match cache.try_get::<ScopeValue<T>>() {
-                Some(cached) => Ok((*cached).clone()),
-                None => {
-                  let global_scope = self
-                    .global_scope
-                    .get(key)
-                    .unwrap_or_else(|| panic!("missing global scope for key {key}"));
-                  let mut allow = Vec::new();
-                  let mut deny = Vec::new();
-
-                  for allowed in &global_scope.allow {
-                    allow.push(Arc::new(T::deserialize(app, allowed.clone()).map_err(|e| {
-                      crate::Error::CannotDeserializeScope(Box::new(e))
-                    })?));
-                  }
-                  for denied in &global_scope.deny {
-                    deny.push(Arc::new(T::deserialize(app, denied.clone()).map_err(|e| {
-                      crate::Error::CannotDeserializeScope(Box::new(e))
-                    })?));
-                  }
-
-                  let scope = ScopeValue {
-                    allow: Arc::new(allow),
-                    deny: Arc::new(deny),
-                  };
-                  let _ = cache.set(scope.clone());
-                  Ok(scope)
-                }
-              }
-            }
-
-            fn get_command_scope_typed'''
-          source, count = pattern.subn(replacement, source, count=1)
-          if count != 1:
-              raise SystemExit(f"expected one global-scope function replacement, found {count}")
-
-          path.write_text(source)
-
-      - name: Commit repair
+      - name: Commit formatting if needed
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f /tmp/already-patched ]; then
-            echo "repair already present"
+          if git diff --quiet; then
+            echo "already formatted"
             exit 0
           fi
           git diff --check
           git config user.name "fieldwork-agent"
           git config user.email "fieldwork-agent@users.noreply.github.com"
-          git add crates/tauri/src/ipc/authority.rs
-          git commit -m "fix(acl): isolate global scope caches by plugin"
+          git add crates/tauri/src/ipc/authority.rs crates/tests/acl/tests/global_scope_cache.rs
+          git commit -m "style(acl): format global scope cache candidate"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
