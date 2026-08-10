@@ -14,6 +14,14 @@ use tauri::{
   AppHandle, Runtime,
 };
 
+#[cfg(feature = "dynamic-acl")]
+use tauri::{
+  ipc::CapabilityBuilder,
+  plugin::PluginApi,
+  utils::acl::{manifest::Manifest, Permission},
+  Manager,
+};
+
 type ScopeSnapshot = (Vec<String>, Vec<String>);
 type ScopeSink = Arc<Mutex<Option<ScopeSnapshot>>>;
 
@@ -66,9 +74,8 @@ fn repeated_scope_plugin(name: &'static str) -> TauriPlugin<MockRuntime> {
     .build()
 }
 
-fn context_with_scopes() -> tauri::Context<MockRuntime> {
-  let mut context = mock_context(noop_assets());
-  let resolved = Resolved {
+fn resolved_scopes() -> Resolved {
+  Resolved {
     global_scope: [
       (
         "alpha".to_string(),
@@ -88,9 +95,33 @@ fn context_with_scopes() -> tauri::Context<MockRuntime> {
     .into_iter()
     .collect(),
     ..Default::default()
-  };
+  }
+}
 
-  *context.runtime_authority_mut() = tauri::runtime_authority!(Default::default(), resolved);
+fn context_with_scopes() -> tauri::Context<MockRuntime> {
+  let mut context = mock_context(noop_assets());
+  *context.runtime_authority_mut() =
+    tauri::runtime_authority!(Default::default(), resolved_scopes());
+  context
+}
+
+#[cfg(feature = "dynamic-acl")]
+fn context_with_dynamic_scope_manifest() -> tauri::Context<MockRuntime> {
+  let mut context = mock_context(noop_assets());
+  let manifest = Manifest {
+    permissions: [(
+      "scope".to_string(),
+      Permission {
+        identifier: "scope".to_string(),
+        ..Default::default()
+      },
+    )]
+    .into_iter()
+    .collect(),
+    ..Default::default()
+  };
+  let acl = [("beta".to_string(), manifest)].into_iter().collect();
+  *context.runtime_authority_mut() = tauri::runtime_authority!(acl, resolved_scopes());
   context
 }
 
@@ -171,4 +202,64 @@ fn repeated_same_plugin_lookup_reuses_deserialized_scope() {
   run_setup(app);
 
   assert_eq!(DESERIALIZATIONS.load(Ordering::SeqCst), 2);
+}
+
+#[cfg(feature = "dynamic-acl")]
+#[test]
+fn dynamic_acl_refreshes_only_changed_plugin_scope_cache() {
+  DESERIALIZATIONS.store(0, Ordering::SeqCst);
+
+  let alpha_api: Arc<Mutex<Option<PluginApi<MockRuntime, ()>>>> = Default::default();
+  let alpha_api_for_setup = alpha_api.clone();
+  let alpha = PluginBuilder::<MockRuntime>::new("alpha")
+    .setup(move |_app, api| {
+      let scope = api.scope::<CountingScope>()?;
+      assert_eq!(scope.allows()[0].0, "alpha-allow");
+      assert_eq!(scope.denies()[0].0, "alpha-deny");
+      *alpha_api_for_setup.lock().unwrap() = Some(api.clone());
+      Ok(())
+    })
+    .build();
+
+  let beta = PluginBuilder::<MockRuntime>::new("beta")
+    .setup(move |app, api| {
+      let before = api.scope::<CountingScope>()?;
+      assert_eq!(before.allows()[0].0, "beta-allow");
+      assert_eq!(before.denies()[0].0, "beta-deny");
+
+      app.add_capability(
+        CapabilityBuilder::new("runtime-beta").permission_scoped(
+          "beta:scope",
+          vec!["beta-extra".to_string()],
+          Vec::<String>::new(),
+        ),
+      )?;
+
+      let after = api.scope::<CountingScope>()?;
+      assert_eq!(after.allows()[0].0, "beta-allow");
+      assert_eq!(after.allows()[1].0, "beta-extra");
+      assert_eq!(after.denies()[0].0, "beta-deny");
+
+      let alpha_api = alpha_api
+        .lock()
+        .unwrap()
+        .as_ref()
+        .expect("alpha plugin setup should run first")
+        .clone();
+      let alpha_after = alpha_api.scope::<CountingScope>()?;
+      assert_eq!(alpha_after.allows()[0].0, "alpha-allow");
+      assert_eq!(alpha_after.denies()[0].0, "alpha-deny");
+      Ok(())
+    })
+    .build();
+
+  let app = mock_builder()
+    .plugin(alpha)
+    .plugin(beta)
+    .build(context_with_dynamic_scope_manifest())
+    .unwrap();
+
+  run_setup(app);
+
+  assert_eq!(DESERIALIZATIONS.load(Ordering::SeqCst), 7);
 }
