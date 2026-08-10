@@ -114,6 +114,11 @@ impl RuntimeAuthority {
       .keys()
       .map(|key| (*key, StateManager::new()))
       .collect();
+    let global_scope_cache = resolved_acl
+      .global_scope
+      .keys()
+      .map(|key| (key.clone(), StateManager::new()))
+      .collect();
     Self {
       #[cfg(any(feature = "dynamic-acl", debug_assertions))]
       acl,
@@ -124,7 +129,7 @@ impl RuntimeAuthority {
         command_scope: resolved_acl.command_scope,
         global_scope: resolved_acl.global_scope,
         command_cache,
-        global_scope_cache: StateManager::new(),
+        global_scope_cache,
       },
     }
   }
@@ -180,12 +185,19 @@ impl RuntimeAuthority {
 
     // fill global scope
     for (plugin, global_scope) in resolved.global_scope {
-      let global_scope_entry = self.scope_manager.global_scope.entry(plugin).or_default();
+      let global_scope_entry = self
+        .scope_manager
+        .global_scope
+        .entry(plugin.clone())
+        .or_default();
 
       global_scope_entry.allow.extend(global_scope.allow);
       global_scope_entry.deny.extend(global_scope.deny);
 
-      self.scope_manager.global_scope_cache = StateManager::new();
+      self
+        .scope_manager
+        .global_scope_cache
+        .insert(plugin, StateManager::new());
     }
 
     // denied commands
@@ -667,7 +679,7 @@ pub struct ScopeManager {
   command_scope: BTreeMap<ScopeKey, ResolvedScope>,
   global_scope: BTreeMap<String, ResolvedScope>,
   command_cache: BTreeMap<ScopeKey, StateManager>,
-  global_scope_cache: StateManager,
+  global_scope_cache: BTreeMap<String, StateManager>,
 }
 
 /// Marks a type as a scope object.
@@ -739,32 +751,39 @@ impl ScopeManager {
     app: &AppHandle<R>,
     key: &str,
   ) -> crate::Result<ScopeValue<T>> {
-    match self.global_scope_cache.try_get::<ScopeValue<T>>() {
+    let Some(cache) = self.global_scope_cache.get(key) else {
+      return Ok(ScopeValue {
+        allow: Arc::new(Vec::new()),
+        deny: Arc::new(Vec::new()),
+      });
+    };
+
+    match cache.try_get::<ScopeValue<T>>() {
       Some(cached) => Ok((*cached).clone()),
       None => {
+        let global_scope = self
+          .global_scope
+          .get(key)
+          .unwrap_or_else(|| panic!("missing global scope for key {key}"));
         let mut allow = Vec::new();
         let mut deny = Vec::new();
 
-        if let Some(global_scope) = self.global_scope.get(key) {
-          for allowed in &global_scope.allow {
-            allow
-              .push(Arc::new(T::deserialize(app, allowed.clone()).map_err(
-                |e| crate::Error::CannotDeserializeScope(Box::new(e)),
-              )?));
-          }
-          for denied in &global_scope.deny {
-            deny
-              .push(Arc::new(T::deserialize(app, denied.clone()).map_err(
-                |e| crate::Error::CannotDeserializeScope(Box::new(e)),
-              )?));
-          }
+        for allowed in &global_scope.allow {
+          allow.push(Arc::new(T::deserialize(app, allowed.clone()).map_err(|e| {
+            crate::Error::CannotDeserializeScope(Box::new(e))
+          })?));
+        }
+        for denied in &global_scope.deny {
+          deny.push(Arc::new(T::deserialize(app, denied.clone()).map_err(|e| {
+            crate::Error::CannotDeserializeScope(Box::new(e))
+          })?));
         }
 
         let scope = ScopeValue {
           allow: Arc::new(allow),
           deny: Arc::new(deny),
         };
-        self.global_scope_cache.set(scope.clone());
+        let _ = cache.set(scope.clone());
         Ok(scope)
       }
     }
