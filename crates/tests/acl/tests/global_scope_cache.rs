@@ -7,7 +7,10 @@ use tauri::{
   ipc::ScopeObject,
   plugin::{Builder as PluginBuilder, TauriPlugin},
   test::{mock_builder, mock_context, noop_assets, MockRuntime},
-  utils::acl::{resolved::{Resolved, ResolvedScope}, Value},
+  utils::acl::{
+    resolved::{Resolved, ResolvedScope},
+    Value,
+  },
   AppHandle, Runtime,
 };
 
@@ -119,11 +122,17 @@ fn global_scope_cache_keeps_plugin_keys_distinct() {
 
   assert_eq!(
     snapshot(&alpha),
-    (vec!["alpha-allow".to_string()], vec!["alpha-deny".to_string()])
+    (
+      vec!["alpha-allow".to_string()],
+      vec!["alpha-deny".to_string()]
+    )
   );
   assert_eq!(
     snapshot(&beta),
-    (vec!["beta-allow".to_string()], vec!["beta-deny".to_string()])
+    (
+      vec!["beta-allow".to_string()],
+      vec!["beta-deny".to_string()]
+    )
   );
 }
 
@@ -143,7 +152,10 @@ fn empty_global_scope_lookup_does_not_poison_configured_plugin() {
   assert_eq!(snapshot(&empty), (vec![], vec![]));
   assert_eq!(
     snapshot(&beta),
-    (vec!["beta-allow".to_string()], vec!["beta-deny".to_string()])
+    (
+      vec!["beta-allow".to_string()],
+      vec!["beta-deny".to_string()]
+    )
   );
 }
 
