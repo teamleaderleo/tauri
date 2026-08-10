@@ -769,14 +769,16 @@ impl ScopeManager {
         let mut deny = Vec::new();
 
         for allowed in &global_scope.allow {
-          allow.push(Arc::new(T::deserialize(app, allowed.clone()).map_err(|e| {
-            crate::Error::CannotDeserializeScope(Box::new(e))
-          })?));
+          allow
+            .push(Arc::new(T::deserialize(app, allowed.clone()).map_err(
+              |e| crate::Error::CannotDeserializeScope(Box::new(e)),
+            )?));
         }
         for denied in &global_scope.deny {
-          deny.push(Arc::new(T::deserialize(app, denied.clone()).map_err(|e| {
-            crate::Error::CannotDeserializeScope(Box::new(e))
-          })?));
+          deny
+            .push(Arc::new(T::deserialize(app, denied.clone()).map_err(
+              |e| crate::Error::CannotDeserializeScope(Box::new(e)),
+            )?));
         }
 
         let scope = ScopeValue {
