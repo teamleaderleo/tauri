@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fieldwork/global-scope-cache-keying
+  pull_request:
+    branches:
+      - dev
   workflow_dispatch:
 
 permissions:
@@ -15,11 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify pinned source
+      - name: Verify pinned source ancestry
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "2f11853d2108d2790917c68f10de7a4d01a6d70f"
+          pinned="2f11853d2108d2790917c68f10de7a4d01a6d70f"
+          git merge-base --is-ancestor "$pinned" HEAD
 
       - name: Inject focused global-scope cache controls
         shell: python
