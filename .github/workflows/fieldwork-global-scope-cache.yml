@@ -6,7 +6,7 @@ on:
       - fieldwork/global-scope-cache-keying
   pull_request:
     branches:
-      - dev
+      - fieldwork/global-scope-cache-base
   workflow_dispatch:
 
 permissions:
