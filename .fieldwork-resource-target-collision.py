@@ -84,25 +84,28 @@ mod fieldwork_resource_target_collision {
   }
 
   #[test]
-  fn same_source_same_target_overlap_remains_rejected() {
+  fn same_canonical_source_same_target_overlap_remains_valid() {
     let root = temp_root("resource-same-source-overlap");
     let output = root.join("out");
     fs::create_dir_all(&output).unwrap();
 
     let source = root.join("source.txt");
     fs::write(&source, b"same source").unwrap();
-    let pattern = root.join("*.txt").to_string_lossy().into_owned();
+    let source_alias = format!("{}/./source.txt", root.display());
     let resources = HashMap::from([
       (source.to_string_lossy().into_owned(), "same.txt".to_string()),
-      (pattern, "same.txt".to_string()),
+      (source_alias, "same.txt".to_string()),
     ]);
 
     let result = copy_resources(ResourcePaths::from_map(&resources, true), &output);
-    let _ = fs::remove_dir_all(&root);
+
     assert!(
-      result.is_err(),
-      "existing duplicate-copy behavior for identical source/target overlap changed"
+      result.is_ok(),
+      "the same canonical source claiming the same target should remain valid: {result:?}"
     );
+    assert_eq!(fs::read(output.join("same.txt")).unwrap(), b"same source");
+
+    let _ = fs::remove_dir_all(&root);
   }
 
   #[test]
